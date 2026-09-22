@@ -1,0 +1,131 @@
+name: 手机认不出来 / 不动
+description: 合成好了，但相册里看不到动效、长按不播放、只有静态图。请把诊断信息一次填全
+title: "[手机不认] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        填全信息能省掉几轮来回。其中最有用的一个是 `--inspect` 的输出，有了它基本能直接定位。
+
+        提交前请先确认这四件事（对应 README 的[排查清单](https://github.com/lutao043/MotionPhotoConverter/blob/master/README.md)）：
+
+        1. 传文件用的是无损方式吗？数据线、互传、AirDrop 都行。微信和 QQ 发图会重新压缩，尾部视频会被整段丢掉。
+        2. 换成你手机品牌对应的档位（`--vendor`）重做过吗？默认档位是 `xiaomi`。
+        3. 换过文件名，或者让相册重新扫描过吗？相册有缓存，可能还在用旧结果。
+        4. 用 `python3 main.py --verify 你的产物.jpg` 检查过吗？它通过说明文件结构是对的，问题更可能在传输或系统开关上。
+
+  - type: input
+    id: phone
+    attributes:
+      label: 手机型号与系统版本
+      description: 例如「小米 15 / HyperOS 3.0.2」「OPPO Find X8 / ColorOS 15」
+      placeholder: 小米 15 / HyperOS 3.0.2
+    validations:
+      required: true
+
+  - type: dropdown
+    id: vendor
+    attributes:
+      label: 转换时用的档位（--vendor）
+      options:
+        - 没指定（用默认的 xiaomi）
+        - xiaomi
+        - google
+        - samsung
+        - oppo
+        - vivo
+        - 不确定 / 忘了
+    validations:
+      required: true
+
+  - type: dropdown
+    id: transfer
+    attributes:
+      label: 文件是怎么传到手机的
+      options:
+        - 数据线 / U 盘
+        - 互传 / 快传 / AirDrop 等无损方式
+        - 微信「原图」或「文件」发送
+        - 微信 / QQ 普通发图（会压缩）
+        - 网盘 / 云盘
+        - 还没传，在电脑上看的
+        - 其他
+    validations:
+      required: true
+
+  - type: dropdown
+    id: viewer
+    attributes:
+      label: 在哪个 App 里看不到动效
+      options:
+        - 手机系统相册
+        - Google Photos
+        - 文件管理器 / 其他看图 App
+        - 微信 / QQ 聊天窗口里
+        - 其他
+    validations:
+      required: true
+
+  - type: textarea
+    id: inspect
+    attributes:
+      label: 产物的 --inspect 输出
+      description: 在电脑上运行 `python3 main.py --inspect 你的产物.jpg`，把**完整输出**粘到这里（Windows 同样这条命令）
+      render: text
+      placeholder: |
+        文件：001_livePhoto.jpg（3312345 字节）
+
+        JPEG 段：
+          APP1  偏移 2    长度 32768  Exif
+          ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: verify
+    attributes:
+      label: --verify 的输出（如果有）
+      description: 运行 `python3 main.py --verify 你的产物.jpg --vendor 你用的档位`
+      render: text
+    validations:
+      required: false
+
+  - type: textarea
+    id: command
+    attributes:
+      label: 转换时用的完整命令与输出
+      description: 包含 `已生成` 那一行和任何 `提示：`
+      render: text
+      placeholder: python3 main.py ./media/ --vendor xiaomi
+    validations:
+      required: false
+
+  - type: input
+    id: version
+    attributes:
+      label: 工具版本（python3 main.py --version）
+      placeholder: motionphoto 2.0.0
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: tried
+    attributes:
+      label: 我已经试过
+      options:
+        - label: 用 --verify 检查过产物，结论是通过（或贴了上面的输出）
+        - label: 换成手机品牌对应的档位重新合成过
+        - label: 换过文件名 / 让相册重新扫描过
+        - label: 用无损方式（数据线、互传等）重新传过
+        - label: 拿手机自带相机拍的动态照片用 --inspect 对照过
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: 其他补充
+      description: 例如源视频是哪里来的、多长的视频、这台手机上以前有没有成功显示过动态照片
+    validations:
+      required: false

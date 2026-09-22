@@ -1,0 +1,47 @@
+name: 使用提问
+description: 不知道怎么用、想确认某个行为、想要新功能
+title: "[提问] "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        提问前可以先翻这两个地方，不少疑问已经写在那里了：
+
+        - [README](https://github.com/lutao043/MotionPhotoConverter/blob/master/README.md)：快速开始、全部选项、按手机品牌选档位、认不出来时的排查清单
+        - [TECHNICAL.md](https://github.com/lutao043/MotionPhotoConverter/blob/master/TECHNICAL.md)：字节结构、各厂商字段差异、`--verify` 校验项
+
+  - type: textarea
+    id: goal
+    attributes:
+      label: 你想做什么
+      description: 用一两句话说明目标，例如「把 iPhone 实况照片导出的 jpg + mov 合成一张动态照片」
+      placeholder: 我想……
+    validations:
+      required: true
+
+  - type: textarea
+    id: tried
+    attributes:
+      label: 你试过什么，结果如何
+      description: 运行过的命令、看到的现象或报错
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: files
+    attributes:
+      label: 相关文件的情况
+      description: 照片/视频的扩展名、来源；如果已经生成了产物，`python3 main.py --inspect 产物.jpg` 的输出很有帮助
+      render: text
+    validations:
+      required: false
+
+  - type: input
+    id: env
+    attributes:
+      label: 操作系统与 Python 版本
+      placeholder: macOS 15 / Python 3.9.6
+    validations:
+      required: false

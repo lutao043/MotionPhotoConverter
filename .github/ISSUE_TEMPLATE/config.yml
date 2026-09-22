@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 先看 README 的「手机认不出来怎么办」
+    url: https://github.com/lutao043/MotionPhotoConverter/blob/master/README.md
+    about: 微信和 QQ 传图会压掉视频、相册有缓存、档位与手机品牌不匹配、ROM 的「第三方动态照片」开关。多数问题在这七条里就能解决。
+  - name: 想知道产物内部结构长什么样
+    url: https://github.com/lutao043/MotionPhotoConverter/blob/master/TECHNICAL.md
+    about: 字节布局、各厂商字段对照、v1 为什么失败、校验项明细都在这里。

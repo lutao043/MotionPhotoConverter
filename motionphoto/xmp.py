@@ -1,6 +1,6 @@
 """XMP 元数据生成、合并与读取。
 
-写入的属性对齐真机文件（见 README「各家实现对照」）：
+写入的属性对齐真机文件（见 TECHNICAL.md「各家实现对照」）：
   * 通用：GCamera:MotionPhoto / MotionPhotoVersion / MotionPhotoPresentationTimestampUs
            + Container:Directory（主图项 + 视频项，视频项 Length = MP4 字节数）
   * 小米：额外补旧字段 GCamera:MicroVideo / MicroVideoVersion / MicroVideoOffset /

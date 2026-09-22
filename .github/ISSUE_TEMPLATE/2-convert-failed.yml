@@ -1,0 +1,79 @@
+name: 转换失败 / 报错
+description: 运行时报错、文件没生成、校验不通过。报错信息往往直接说明了原因
+title: "[报错] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        工具的报错大多是源文件本身的问题，先看一眼报错内容再提交：
+
+        - `源图不是有效的 JPEG` / `MP4 缺少 moov box` / `MP4 首个 box 不是 ftyp` → 源文件不完整或格式不对（比如下载没下完、视频其实是 .mov）
+        - `自检未通过，已放弃写出该文件` → 工具的自我保护，不会给你半成品，请把完整输出贴上来
+        - `读取失败` → 权限或文件被占用
+
+  - type: textarea
+    id: command
+    attributes:
+      label: 你运行的完整命令
+      render: text
+      placeholder: python3 main.py ./media/ --vendor xiaomi
+    validations:
+      required: true
+
+  - type: textarea
+    id: output
+    attributes:
+      label: 完整输出 / 报错信息
+      description: 从命令开始到结束的全部内容（含 ❌ 和 `提示：` 行）
+      render: text
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: 工具版本（python3 main.py --version）
+      placeholder: motionphoto 2.0.0
+    validations:
+      required: true
+
+  - type: input
+    id: env
+    attributes:
+      label: 操作系统与 Python 版本
+      description: 例如「Windows 11 / Python 3.12.4」「macOS 15 / Python 3.9.6」
+      placeholder: Windows 11 / Python 3.12.4
+    validations:
+      required: true
+
+  - type: dropdown
+    id: source
+    attributes:
+      label: 源文件是怎么来的
+      options:
+        - 手机拍的照片 + 手机录的视频
+        - 相机 / 运动相机导出
+        - 从 iPhone 导出的实况照片（HDR 图 + MOV）
+        - 第三方 App 导出（剪映、抖音、网盘等）
+        - 从网上下载的
+        - 其他 / 不确定
+    validations:
+      required: false
+
+  - type: input
+    id: fileinfo
+    attributes:
+      label: 源文件的格式与大小
+      description: 照片是 .jpg 还是 .jpeg？视频是什么格式、多大、多长？（视频的扩展名是 .mp4，但内容可能是 .mov）
+      placeholder: 001.jpg 约 3 MB；001.mp4 约 12 MB，8 秒
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: 其他补充
+      description: 例如是不是只有个别文件失败、换过文件后是否还报同样的错
+    validations:
+      required: false
