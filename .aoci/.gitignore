@@ -1,7 +1,9 @@
 # AOCI .aoci 资产边界
 #
 # 默认规则：本目录中的未知文件均视为当前机器的运行时产物，不进入 Git。
-# 正式认知与治理资产通过下方白名单显式放行。
+# config.json（本机 aoci 配置）与 baseline.json（本机扫描基线）同样按本机产物处理，
+# 不再随仓库分发；正式认知条目本身在仓库根的 aoci*.txt 里。
+# 若 aoci 重新生成本文件并放行它们，请再次移除对应白名单行。
 
 *
 
@@ -9,7 +11,5 @@
 !.gitignore
 
 # AOCI 正式认知与治理资产。
-!baseline.json
 !database-baseline.json
-!config.json
 !curation.json
