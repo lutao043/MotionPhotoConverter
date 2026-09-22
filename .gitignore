@@ -1,3 +1,7 @@
+# 本机配置与会话产物，不入库（.zcode/config.json 里有本机绝对路径）
+.zcode/config.json
+.zcode/plans/
+
 .idea/
 *.jpg
 *.mp4
