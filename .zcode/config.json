@@ -1,0 +1,14 @@
+{
+  "mcp": {
+    "servers": {
+      "aoci": {
+        "command": "/Users/lutao/.local/bin/aoci",
+        "args": [
+          "--repo",
+          "/Users/lutao/code/service/MotionPhotoConverter",
+          "mcp"
+        ]
+      }
+    }
+  }
+}
