@@ -1,1 +1,28 @@
 #AOCI-CODE-VOLUME: 1
+
+===/Users/lutao/code/service/MotionPhotoConverter/===
+.gitattributes[FV6T]: F:强制全仓库文本按 LF 检出，让 AOCI 基线所依赖的字节在任意平台一致。 | R:- | A:- | S:AOCI 基线按原始字节比对，autocrlf 改写行尾会让整棵树被判为 stale，所以 `* text=auto eol=lf` 不能删。
+.gitignore[FV5T]: F:排除本机配置、会话产物、IDE 目录、媒体样本与 Python 缓存。 | R:- | A:忽略 .zcode/config.json、.zcode/plans/、.idea/、*.jpg、*.mp4、__pycache__/、*.pyc。 | S:*.jpg 与 *.mp4 是有意排除的：真机样本与产物都不入库，样本只在本地校验，别为提交素材而放开。
+AGENTS.md[SG9S]: F:在本仓库工作的 Agent 的 AOCI 使用合同：认知建立、复用与恢复、收尾维护与专项流程边界。 | R:- | A:只规定接入、使用与收尾原则；Header/Entry 格式、批次上限、恢复步骤以 aoci_rules、Guide 与工具返回为准。 | S:aoci 区块是机器管理的边界，改写整份文档时必须保留 begin/end 标记；其规定在认知状态上优先于历史记忆与其它文档，但不能覆盖机器事实。
+LICENSE[FG3M]: F:Apache-2.0 全文，声明授权、专利与免责条款。 | R:code:README.md | A:仓库以 Apache License 2.0 发布。 | S:-
+README.md[SU8M]: F:面向使用者的说明：快速开始、全部选项、按手机品牌选档位、认不出来时的排查清单与资料来源。 | R:code:TECHNICAL.md,code:main.py | A:`--vendor` 六个档位、输出命名风格、`--verify` 与 `--inspect` 的用法、苹果档位产出一对同名文件。 | S:「先换无损传输、清相册缓存、再换档位」的排查顺序来自实际反馈；苹果档位必须写明一对文件要一起导入；改产物结构或命名时本文与 TECHNICAL.md 同步。
+TECHNICAL.md[SG8M]: F:面向开发者的字节级说明：产物结构、各厂商字段对照、苹果实况照片布局、v1 失败复盘、校验项与验证边界。 | R:code:README.md,code:motionphoto/convert.py,code:motionphoto/mov.py,code:motionphoto/exif.py | A:各档位字段依据、`--verify` 校验项清单、苹果档位与真机样本的已知差异。 | S:「验证边界」必须如实写明产物未上真机的部分；新增档位或改字段时本文与 README 的鸣谢要一起更新。
+main.py[EG7L]: F:命令行入口：递归配对源文件、按档位分发到安卓单文件或苹果成对产出、承载 --verify 与 --inspect。 | R:code:motionphoto/convert.py | A:`--vendor`、`--name-style`、`--delete-source`、`--force`、`--dry-run`、`--timestamp-us`、`--verify`、`--inspect`；退出码 0 成功、1 用法错、2 有失败。 | S:成对产出先写静止图再写视频，第二个失败要撤回第一个；删源文件前按真实文件比对同名，因为 keep 风格的产物只差扩展名大小写。
+
+===/Users/lutao/code/service/MotionPhotoConverter/.github/ISSUE_TEMPLATE/===
+1-phone-not-playing.yml[SU6S]: F:「手机认不出来」的 issue 表单，把定位所需信息一次收全。 | R:code:README.md | A:必填手机型号与系统版本、档位、传输方式、在哪个 App 看不到动效、--inspect 输出。 | S:--inspect 输出设为必填是有意的，缺它基本无法定位；不要把这项放宽为选填。
+2-convert-failed.yml[SU5T]: F:「转换失败/报错」的 issue 表单，要求命令、完整输出与运行环境。 | R:code:motionphoto/convert.py | A:必填完整命令、完整输出、工具版本、系统与 Python 版本。 | S:要求贴完整输出而不是摘要，是因为报错行与提示行是判断源文件问题的唯一依据。
+3-question.yml[SU4T]: F:「使用提问」的表单，先引导提问者自查 README 与 TECHNICAL。 | R:code:README.md,code:TECHNICAL.md | A:必填想做什么与试过什么，运行环境选填。 | S:-
+config.yml[FQ4T]: F:issue 模板总配置：允许空白 issue，并在新建入口挂上 README 与 TECHNICAL 的链接。 | R:code:README.md,code:TECHNICAL.md | A:blank_issues_enabled=true 与两条 contact_links。 | S:-
+
+===/Users/lutao/code/service/MotionPhotoConverter/motionphoto/===
+__init__.py[CG6T]: F:包声明与版本号；模块清单写在这里，版本号会被写进 XMP 的工具标记。 | R:- | A:`__version__` 供 CLI 的 --version 与 XMP 的 x:xmptk 使用。 | S:-
+convert.py[AB9L]: F:组装与校验中枢：把照片与视频拼成安卓单文件产物，或苹果档位的一对文件，并在写出前自检。 | R:code:motionphoto/jpeg.py,code:motionphoto/xmp.py,code:motionphoto/mp4.py,code:motionphoto/mov.py,code:motionphoto/exif.py | A:`Options`、`build_motion_photo`、`build_live_photo`、`verify_bytes`、`verify_live_photo_pair`、`output_name`、`live_photo_names`、`SUPPORTED_VENDORS`、`ConvertError`。 | S:两条定位规则都要落在视频起点，自检不过就抛错不写文件；厂商分支是分散的 if/elif，加档位要同时改这里与 xmp.py；苹果档位的 Exif 写入失败是硬错误，安卓档位只告警。
+exif.py[DD8L]: F:Exif/TIFF 读写：厂商私有 tag（小米 0x8897、OPPO UserComment）与 Apple MakerNote 里的 Live Photo 标识符。 | R:code:motionphoto/convert.py | A:`TagSpec`、`write_tags`、`build_tiff`、`describe`、`apple_identifier_tag`、`patch_apple_makernote`、`read_apple_identifier`、`makernote_entries`。 | S:写入一律「原字节不动、只追加并回指」，改这条会波及 MakerNote 与缩略图；Apple MakerNote 的内部偏移相对自身起点，且不足约 1KB 时 ImageIO 不解析，生成的必须补齐到 1568 字节。
+jpeg.py[DD7M]: F:JPEG 段级解析与 APP1/APP2 段读写，正确处理熵编码里的 0xFF00 填充与重启标记。 | R:code:motionphoto/convert.py | A:`parse_structure`、`find_app_segment`、`upsert_app_segment`、`remove_all_app_segments`、`strip_trailing_data`、`build_app_segment`；段载荷上限 65533。 | S:不解码图像数据，只重排段区，主图 SOS 到 EOI 的字节必须逐字节保持；同名段要先删干净再写，否则会留下过期偏移。
+mov.py[DD8L]: F:QuickTime/MOV 写侧：读写 moov/meta 的 mdta 键值，并在 moov 变大后修正 chunk 偏移。 | R:code:motionphoto/mp4.py,code:motionphoto/convert.py | A:`set_content_identifier`、`read_content_identifier`、`chunk_offsets`、`mdat_payloads`、`describe`、`has_still_image_time_track`、`MovError`。 | S:只动元数据，mdat 载荷逐字节保留；moov 之前的偏移不动、之后的加差值、落在 moov 内的报错；分片或含 sidx/saio 的文件一律拒绝改写。
+mp4.py[DD7M]: F:MP4 拼接前预检：首个 box、moov 与 mdat、时长、编码与分片标志，产出错误与警告。 | R:code:motionphoto/mov.py | A:`parse`、`validate`（errors 非空即不可继续）、`Mp4Info`、`COMMON_CODECS`；`allow_quicktime` 供苹果档位关掉 .mov 品牌告警。 | S:纯只读，任何写入能力都不在这里；errors 与 warnings 的分界是「一定播不了」与「相册多半仍能播」，不要混用。
+xmp.py[DD7M]: F:Google 体系 XMP 的生成、合并与宽松读取，含各家厂商额外字段与 Container:Directory。 | R:code:motionphoto/convert.py | A:`build_packet`、`merge_packet`、`read_meta`、`vendor_properties`、`strip_motion_photo`、`has_meaningful_properties`、`VENDORS`。 | S:属性必须写在 APP1 段内、图像数据之前；合并前先按 OWNED_PROPERTIES 清掉旧值，否则文件里会留下指向旧视频位置的偏移。
+
+===/Users/lutao/code/service/MotionPhotoConverter/tools/===
+apple_probe.swift[XQ5T]: F:开发用只读探测脚本：用 ImageIO 读静止图的 MakerApple 字典、用 AVFoundation 读 MOV 的 QuickTime 元数据。 | R:code:motionphoto/exif.py,code:motionphoto/mov.py | A:用法 `swift tools/apple_probe.swift <文件>...`，需要 Xcode，不参与工具运行。 | S:这是拿不到 iPhone 时验证「苹果自己的解析器认不认」的主要手段；改 Apple MakerNote 或 moov/meta 布局后应重跑它。
