@@ -208,6 +208,131 @@ def build_mp4_without_moov() -> bytes:
 
 
 # --------------------------------------------------------------------------- #
+# MOV（苹果实况照片的视频侧）：带 stco 的最小结构，可放在 mdat 之前或之后
+# --------------------------------------------------------------------------- #
+
+def _mov_trak(chunk_offsets, sample_sizes) -> bytes:
+    """最小视频轨：hdlr=vide + stsd(avc1) + stts/stsc/stsz/stco。"""
+    hdlr = _box(b"hdlr", b"\x00\x00\x00\x00" + struct.pack(">I", 0) + b"vide" + b"\x00" * 12 + b"\x00\x00")
+    mdhd = _box(b"mdhd", b"\x00\x00\x00\x00" + struct.pack(">II", 0, 0)
+                + struct.pack(">II", 600, 600) + b"\x00\x00\x00\x00")
+    stsd_entry = struct.pack(">I", 16) + b"avc1" + b"\x00" * 8
+    stsd = _box(b"stsd", b"\x00\x00\x00\x00" + struct.pack(">I", 1) + stsd_entry)
+    stts = _box(b"stts", b"\x00\x00\x00\x00" + struct.pack(">I", 1)
+                + struct.pack(">II", len(sample_sizes), 500))
+    stsc = _box(b"stsc", b"\x00\x00\x00\x00" + struct.pack(">I", 1)
+                + struct.pack(">III", 1, len(sample_sizes), 1))
+    stsz = _box(b"stsz", b"\x00\x00\x00\x00" + struct.pack(">II", 0, len(sample_sizes))
+                + b"".join(struct.pack(">I", size) for size in sample_sizes))
+    stco = _box(b"stco", b"\x00\x00\x00\x00" + struct.pack(">I", len(chunk_offsets))
+                + b"".join(struct.pack(">I", offset) for offset in chunk_offsets))
+    stbl = _box(b"stbl", stsd + stts + stsc + stsz + stco)
+    minf = _box(b"minf", _box(b"vmhd", b"\x00\x00\x00\x01" + b"\x00" * 8) + stbl)
+    return _box(b"trak", _box(b"mdia", mdhd + hdlr + minf))
+
+
+def mdta_meta(entries) -> bytes:
+    """QuickTime 风格的 mdta meta（与真机一样：无 version/flags，hdlr+keys+ilst）。"""
+    keys = b"".join(
+        struct.pack(">I", 8 + len(key)) + b"mdta" + key for key in entries
+    )
+    keys_box = _box(b"keys", b"\x00\x00\x00\x00" + struct.pack(">I", len(entries)) + keys)
+    items = b""
+    for index, key in enumerate(entries, start=1):
+        items += _box(struct.pack(">I", index),
+                      _box(b"data", struct.pack(">II", 1, 0) + b"value-%d" % index))
+    hdlr = _box(b"hdlr", b"\x00\x00\x00\x00" + b"\x00\x00\x00\x00" + b"mdta" + b"\x00" * 12 + b"\x00\x00")
+    return _box(b"meta", hdlr + keys_box + _box(b"ilst", items))
+
+
+def itunes_udta_meta(software: bytes = b"Lavf57") -> bytes:
+    """ISO 风格的 iTunes 元数据（hdlr 是 mdir、ilst 无 keys 表），真机与 ffmpeg 都这么写。"""
+    hdlr = _box(b"hdlr", b"\x00\x00\x00\x00" + struct.pack(">I", 0) + b"mdir" + b"appl" + b"\x00" * 9)
+    ilst = _box(b"ilst", _box(b"\xa9too", _box(b"data", struct.pack(">II", 1, 0) + software)))
+    return _box(b"udta", _box(b"meta", b"\x00\x00\x00\x00" + hdlr + ilst))
+
+
+def build_mov(moov_first: bool = False, media: bytes = b"\xaa" * 64,
+              meta_keys=(), with_itunes_meta: bool = False, fragmented: bool = False) -> bytes:
+    """构造一个 ftyp 品牌为 qt 的最小 MOV。
+
+    moov_first=True 时 moov 在 mdat 之前，chunk 偏移指到 mdat 载荷里——
+    这正是「写元数据撑大 moov 后必须修正偏移」的场景。
+    """
+    ftyp = _box(b"ftyp", b"qt  " + struct.pack(">I", 0) + b"qt  ")
+    sizes = [len(media) // 2 or 1, len(media) - (len(media) // 2 or 1)]
+
+    def assemble(offsets) -> bytes:
+        payload = _mvhd(3000) + _mov_trak(offsets, sizes)
+        if meta_keys:
+            payload += mdta_meta(list(meta_keys))
+        if with_itunes_meta:
+            payload += itunes_udta_meta()
+        return payload
+
+    probe = ftyp + _box(b"moov", assemble([0, 0])) + _box(b"mdat", media)
+    moov_size = len(probe) - len(ftyp) - len(_box(b"mdat", media))
+    payload_start = len(ftyp) + moov_size + 8 if moov_first else len(ftyp) + 8
+    offsets = [payload_start, payload_start + sizes[0]]
+    moov = _box(b"moov", assemble(offsets))
+    if fragmented:
+        moof = _box(b"moof", _box(b"mfhd", b"\x00\x00\x00\x00" + struct.pack(">I", 1)))
+        return ftyp + moov + moof + _box(b"mdat", media)
+    if moov_first:
+        return ftyp + moov + _box(b"mdat", media)
+    return ftyp + _box(b"mdat", media) + moov
+
+
+def mov_mdat_payload(data: bytes) -> bytes:
+    """取出 MOV 里 mdat 的载荷（断言媒体数据逐字节未变）。"""
+    from motionphoto import mov as mov_module
+
+    return b"".join(data[start:end] for start, end in mov_module.mdat_payloads(data))
+
+
+# --------------------------------------------------------------------------- #
+# Apple MakerNote（独立手写，用来验证原地改值不动其它条目）
+# --------------------------------------------------------------------------- #
+
+def build_apple_makernote(identifier: str, with_extra_entries: bool = True) -> bytes:
+    """手写一份 Apple MakerNote：12 字节签名 + 14 字节内部 TIFF 头 + IFD。
+
+    故意不调用 motionphoto.exif 的实现，这样测试验证的是「别人写的 MakerNote
+    我们也能认、也能原地改值」，而不是自证。
+    """
+    signature = b"Apple iOS\x00\x00\x01"
+    head = b"MM\x00\x2a\x00\x01\x00\x09\x00\x00\x00\x01\x00\x00"
+    ifd_offset = len(signature) + len(head)
+    value = identifier.encode("ascii") + b"\x00"
+    entries = []
+    if with_extra_entries:
+        entries.append((0x0003, 7, 12, b"bplist00\x00\x00\x00"))  # 12 字节，走值区
+        entries.append((0x0004, 9, 1, struct.pack(">i", 1)))       # 内联
+    entries.append((0x0011, 2, len(value), value))
+    entries.sort(key=lambda item: item[0])
+
+    ifd_size = 2 + 12 * len(entries) + 4
+    cursor = ifd_offset + ifd_size
+    ifd = struct.pack(">H", len(entries))
+    pending = []
+    for tag, type_, count, raw in entries:
+        if len(raw) <= 4:
+            ifd += struct.pack(">HHI", tag, type_, count) + raw.ljust(4, b"\x00")
+            continue
+        ifd += struct.pack(">HHI", tag, type_, count) + struct.pack(">I", cursor)
+        pending.append((cursor, raw))
+        cursor += len(raw)
+    ifd += struct.pack(">I", 0x00200002)  # 真机的这段不是 0，照抄
+
+    out = bytearray(signature + head + ifd)
+    for offset, raw in pending:
+        while len(out) < offset:
+            out.append(0)
+        out += raw
+    return bytes(out)
+
+
+# --------------------------------------------------------------------------- #
 # 旧版脚本的产物（用于回归：这种文件必须校验失败）
 # --------------------------------------------------------------------------- #
 

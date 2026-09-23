@@ -232,6 +232,25 @@ def merge_packet(existing: str, vendor: str, video_length: int, timestamp_us: in
     return "%s%s\n%s" % (head, description, tail)
 
 
+def strip_motion_photo(packet: str) -> str:
+    """去掉动态照片属性（GCamera/Container/MicroVideo 那一套），保留其它元数据。
+
+    苹果的实况照片不用这套字段，静止图里留着 ``GCamera:MotionPhoto="1"`` 是自相矛盾的声明。
+    """
+    return _strip_owned(packet)
+
+
+# 只剩这些时说明包里已经没有真内容（x:xmptk 是工具标记，rdf:about 是结构属性）
+_BOILERPLATE_PROPERTIES = ("x:xmptk", "rdf:about")
+
+
+def has_meaningful_properties(packet: str) -> bool:
+    """包里除样板属性外是否还有内容——没有的话整段 XMP 都可以不要。"""
+    return any(
+        key not in _BOILERPLATE_PROPERTIES for key in parse_properties(packet)
+    )
+
+
 # --------------------------------------------------------------------------- #
 # 读取（宽松解析：同时支持属性写法与元素写法，前缀按惯例识别）
 # --------------------------------------------------------------------------- #

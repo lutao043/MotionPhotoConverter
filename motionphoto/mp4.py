@@ -171,8 +171,11 @@ def parse(data: bytes) -> Mp4Info:
 COMMON_CODECS = {"avc1", "avc3", "hvc1", "hev1", "mp4v", "avc2"}
 
 
-def validate(data: bytes) -> Tuple[Mp4Info, List[str], List[str]]:
-    """返回 (信息, 错误列表, 警告列表)。错误非空表示不该继续拼接。"""
+def validate(data: bytes, allow_quicktime: bool = False) -> Tuple[Mp4Info, List[str], List[str]]:
+    """返回 (信息, 错误列表, 警告列表)。错误非空表示不该继续拼接。
+
+    allow_quicktime 用于苹果档位：产物本来就是 QuickTime(.mov)，不该再提示品牌问题。
+    """
     errors: List[str] = []
     warnings: List[str] = []
 
@@ -196,7 +199,7 @@ def validate(data: bytes) -> Tuple[Mp4Info, List[str], List[str]]:
         warnings.append("MP4 是分片（moof）文件，部分相册无法播放，建议先转成普通 MP4")
     if info.trailing_garbage:
         warnings.append("MP4 末尾有 %d 字节多余数据" % info.trailing_garbage)
-    if info.brand in ("qt", "qt  "):
+    if info.brand in ("qt", "qt  ") and not allow_quicktime:
         warnings.append("这是 QuickTime(.mov) 而非 MP4（ftyp 品牌为 qt），部分相册不识别")
     if info.video_codec and info.video_codec not in COMMON_CODECS:
         warnings.append(

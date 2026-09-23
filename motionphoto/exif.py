@@ -29,6 +29,19 @@ TAG_XIAOMI_MICRO_VIDEO = 0x8897  # 小米相册读取的私有标记，值 1
 TAG_XIAOMI_MICRO_VIDEO_EXTRA = 0x889F  # 单一来源、含义不明，默认不写
 TAG_EMBEDDED_VIDEO = 0x9A01  # 同上
 TAG_USER_COMMENT = 0x9286
+TAG_MAKER_NOTE = 0x927C
+
+# Apple MakerNote：Live Photo 标识符写在里面的 tag 0x0011（真机 HEIC/JPG 都是如此）。
+# 结构是 12 字节签名（"Apple iOS\0" + 版本）+ 14 字节内部 TIFF 头 + IFD，
+# 值区偏移相对这份 MakerNote 的起点，而不是相对外层 Exif 的 TIFF。
+APPLE_MAKERNOTE_SIGNATURE = b"Apple iOS\x00\x00\x01"
+APPLE_MAKERNOTE_TIFF_HEAD = b"MM\x00\x2a\x00\x01\x00\x09\x00\x00\x00\x01\x00\x00"
+APPLE_MAKERNOTE_IFD_OFFSET = len(APPLE_MAKERNOTE_SIGNATURE) + len(APPLE_MAKERNOTE_TIFF_HEAD)
+APPLE_TAG_CONTENT_IDENTIFIER = 0x0011  # ASCII，UUID 加结尾 NUL 共 37 字节
+# 真机 MakerNote 是 1568 字节。实测 macOS 的 ImageIO（与 iOS 同一套 Exif 解析）
+# 对长度不足 1KB 的 MakerNote 干脆不解析（960 字节读不出、968 字节可以），
+# 所以生成的 MakerNote 按真机尺寸补齐到 1568 字节。
+APPLE_MAKERNOTE_MIN_SIZE = 1568
 
 # APP1 段体上限 65533 字节，减去 b"Exif\0\0" 的 6 字节
 MAX_TIFF_BODY = 65527
@@ -75,6 +88,141 @@ def extra_vendor_tags() -> List[TagSpec]:
 def user_comment_tag(text: str) -> TagSpec:
     """UserComment（0x9286），按 Exif 规范带 8 字节字符集前缀。"""
     return TagSpec(TAG_USER_COMMENT, TYPE_UNDEFINED, b"ASCII\x00\x00\x00" + text.encode("ascii"))
+
+
+def _identifier_bytes(identifier: str) -> bytes:
+    """标识符按 ASCII 编码并补结尾 NUL（真机是 37 字节）。"""
+    try:
+        payload = identifier.encode("ascii")
+    except UnicodeEncodeError:
+        raise ExifError("Live Photo 标识符必须是 ASCII：%r" % identifier)
+    if not payload:
+        raise ExifError("Live Photo 标识符不能为空")
+    return payload + b"\x00"
+
+
+class MakerNoteEntry(NamedTuple):
+    """Apple MakerNote 里的一条记录。offset 是值在 MakerNote 内的偏移（内联值为 None）。"""
+
+    tag: int
+    type: int
+    count: int
+    value: bytes
+    offset: Optional[int]
+
+
+def apple_makernote(identifier: str) -> bytes:
+    """构造一份最小 Apple MakerNote，内部只有一个 Live Photo 标识符 tag 0x0011。
+
+    末尾补齐到真机尺寸：见 :data:`APPLE_MAKERNOTE_MIN_SIZE` 的说明。
+    """
+    value = _identifier_bytes(identifier)
+    value_offset = APPLE_MAKERNOTE_IFD_OFFSET + 2 + 12 + 4
+    ifd = struct.pack(">H", 1)
+    ifd += struct.pack(">HHI", APPLE_TAG_CONTENT_IDENTIFIER, TYPE_ASCII, len(value))
+    ifd += struct.pack(">I", value_offset)
+    ifd += struct.pack(">I", 0)  # 没有下一个 IFD
+    blob = APPLE_MAKERNOTE_SIGNATURE + APPLE_MAKERNOTE_TIFF_HEAD + ifd + value
+    return blob.ljust(APPLE_MAKERNOTE_MIN_SIZE, b"\x00")
+
+
+def apple_identifier_tag(identifier: str) -> TagSpec:
+    """写进 ExifIFD 的 MakerNote（0x927C），Live Photo 的标识符就藏在它里面。"""
+    return TagSpec(TAG_MAKER_NOTE, TYPE_UNDEFINED, apple_makernote(identifier))
+
+
+def makernote_entries(blob: bytes):
+    """解析 Apple MakerNote 的 IFD，返回 ``(endian, 条目列表)``。
+
+    值按真机约定解析：偏移相对这份 MakerNote 的起点。结构不认识就抛 :class:`ExifError`。
+    """
+    if not blob.startswith(b"Apple iOS"):
+        raise ExifError("不是 Apple MakerNote（缺少 Apple iOS 签名）")
+    if len(blob) < APPLE_MAKERNOTE_IFD_OFFSET + 2:
+        raise ExifError("Apple MakerNote 过短")
+    head = blob[12:APPLE_MAKERNOTE_IFD_OFFSET]
+    if head[:2] == b"MM":
+        endian = ">"
+    elif head[:2] == b"II":
+        endian = "<"
+    else:
+        raise ExifError("Apple MakerNote 内部字节序不是 II/MM")
+    ifd = APPLE_MAKERNOTE_IFD_OFFSET
+    count = struct.unpack(endian + "H", blob[ifd:ifd + 2])[0]
+    if count > 512 or ifd + 2 + 12 * count + 4 > len(blob):
+        raise ExifError("Apple MakerNote 的 IFD 条目数 %d 不合理" % count)
+    entries: List[MakerNoteEntry] = []
+    for index in range(count):
+        base = ifd + 2 + 12 * index
+        tag, type_, item_count = struct.unpack(endian + "HHI", blob[base:base + 8])
+        raw = blob[base + 8:base + 12]
+        size = _TYPE_SIZES.get(type_, 1) * item_count
+        if size <= 4:
+            entries.append(MakerNoteEntry(tag, type_, item_count, raw[:size], None))
+            continue
+        value_offset = struct.unpack(endian + "I", raw)[0]
+        if value_offset + size > len(blob):
+            raise ExifError("Apple MakerNote 的 tag 0x%04X 值（偏移 %d）越界" % (tag, value_offset))
+        entries.append(MakerNoteEntry(tag, type_, item_count, blob[value_offset:value_offset + size], value_offset))
+    return endian, entries
+
+
+def read_makernote(tiff: bytes) -> Optional[bytes]:
+    """取出 ExifIFD 里的 MakerNote（0x927C）原始字节，没有则返回 None。"""
+    try:
+        endian, ifd0_offset = _parse_header(tiff)
+        ifd0, _ = _read_ifd(tiff, ifd0_offset, endian)
+        entry = ifd0.get(TAG_EXIF_IFD)
+        if entry is None:
+            return None
+        pointer = _decode_value(tiff, endian, entry[0], entry[1], entry[2])
+        if not isinstance(pointer, int) or not pointer:
+            return None
+        exif_entries, _ = _read_ifd(tiff, pointer, endian)
+    except (ExifError, struct.error):
+        return None
+    maker = exif_entries.get(TAG_MAKER_NOTE)
+    if maker is None:
+        return None
+    blob = _decode_value(tiff, endian, maker[0], maker[1], maker[2])
+    if not isinstance(blob, (bytes, bytearray)):
+        return None
+    return bytes(blob)
+
+
+def read_apple_identifier(tiff: bytes) -> Optional[str]:
+    """从 TIFF 里读出 Apple MakerNote 的 Live Photo 标识符，没有则返回 None。"""
+    blob = read_makernote(tiff)
+    if blob is None:
+        return None
+    try:
+        _, entries = makernote_entries(blob)
+    except (ExifError, struct.error):
+        return None
+    for entry in entries:
+        if entry.tag == APPLE_TAG_CONTENT_IDENTIFIER and entry.type == TYPE_ASCII and entry.value:
+            return entry.value.split(b"\x00")[0].decode("ascii", "replace")
+    return None
+
+
+def patch_apple_makernote(existing: bytes, identifier: str) -> Optional[bytes]:
+    """在已有 Apple MakerNote 里原地改写标识符；做不到（没有该 tag 或长度不同）返回 None。
+
+    真机 MakerNote 本来就带 tag 0x0011（ASCII、37 字节，值在 tag 里记着偏移），
+    原地覆盖那 37 字节既不用重排偏移，也不会碰到苹果另写的嵌套结构，是最安全的改法。
+    """
+    try:
+        _, entries = makernote_entries(existing)
+    except (ExifError, struct.error):
+        return None
+    value = _identifier_bytes(identifier)
+    for entry in entries:
+        if entry.tag != APPLE_TAG_CONTENT_IDENTIFIER:
+            continue
+        if entry.type != TYPE_ASCII or entry.offset is None or entry.count != len(value):
+            return None
+        return existing[:entry.offset] + value + existing[entry.offset + len(value):]
+    return None
 
 
 # --------------------------------------------------------------------------- #
